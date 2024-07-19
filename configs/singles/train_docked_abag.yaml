@@ -1,0 +1,72 @@
+dataset:
+  train:
+    # 621 positive + 6.2k negative (dataset length 621)
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_SAbDab
+      specify_index: ./datasets/docked_SAbDab/train.txt
+      negative_rate: 0.8
+      pos_rmsd_th: 10.0
+    - weights: [1.0]
+      names: ['docked-antibody']
+  valid:
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_SAbDab
+      specify_index: ./datasets/docked_SAbDab/valid.txt
+      pos_rmsd_th: 10.0
+      test_mode: true
+    - names: ['docked-antibody']
+
+dataloader:
+  train:
+    shuffle: true
+    num_workers: 4
+    wrapper:
+      class: DynamicBatchWrapper
+      complexity: n*27 # KNN block graph with 3-edge sparsification
+      ubound_per_batch: 250000  # batch size ~16
+  valid:
+    num_workers: 4
+    wrapper:
+      class: DynamicBatchWrapper
+      complexity: n*27 # KNN block graph with 3-edge sparsification
+      ubound_per_batch: 500000  # batch size ~32
+
+trainer:
+  class: AffinityTrainer
+  config:
+    proj_name: Uni-dG
+    #logger: tensorboard
+    max_epoch: 100
+    save_topk: 10
+    val_freq: 1
+    save_dir: ./ckpts/GET_docked_abag
+    patience: 10
+    metric_min_better: true
+
+    optimizer:
+      class: AdamW
+      lr: 1.0e-4
+
+    scheduler:
+      class: ReduceLROnPlateau
+      factor: 0.6
+      patience: 3
+      mode: min
+      frequency: val_epoch
+      min_lr: 5.0e-6
+
+model:
+  class: AffinityModel
+  model_type: GET
+  hidden_size: 128
+  n_channel: 1
+  n_rbf: 32
+  cutoff: 8.0
+  n_head: 4
+  radial_size: 64
+  edge_size: 64
+  k_neighbors: 9
+  n_layers: 6
+  loss_weights:
+    regression: 0.2
+    classification: 0.8

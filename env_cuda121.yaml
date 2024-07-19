@@ -1,0 +1,25 @@
+name: affinity
+channels:
+  - pytorch
+  - nvidia
+  - bioconda
+  - conda-forge
+  - pyg
+  - defaults
+dependencies:
+  - python=3.9
+  - pytorch::pytorch=2.1.2
+  - pytorch::pytorch-cuda=12.1
+  - pyg::pytorch-scatter
+  - biopython=1.80
+  - tensorboard=2.12.1
+  - scikit-learn
+  - scipy
+  - pandas
+  - pip
+  - pip:
+    - rdkit-pypi==2022.3.5
+    - tqdm
+    - easydict
+    - wandb
+    - sympy

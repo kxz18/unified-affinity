@@ -1,0 +1,116 @@
+dataset:
+  train:
+    # ~500
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/SAbDab
+      specify_index: ./datasets/SAbDab/train.txt
+    # 2k
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PP
+      specify_index: ./datasets/PDBbind/PP/train.txt
+    # 5.4k
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PL-general
+    # 4.6k
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PL-refined
+      specify_index: ./datasets/PDBbind/PL-refined/train.txt
+    # 600
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PN
+    # 9k posivite + 90k negative (dataset length 9k)
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_PDBbind
+      specify_index: ./datasets/docked_PDBbind/train.txt
+      negative_rate: 0.8
+    # 621 positive + 6.2k negative (dataset length 621)
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_SAbDab
+      specify_index: ./datasets/docked_SAbDab/train.txt
+      negative_rate: 0.8
+      pos_rmsd_th: 10.0
+    # 90
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/NL
+      specify_index: ./datasets/PDBbind/NL/train.txt
+    - weights: [5.0, 2.0, 1.0, 1.0, 5.0, 1.0, 1.0, 5.0]
+    #- weights: [0.1, 0.1, 0.01, 0.01, 0.1, 0.01, 0.1] # debug
+      names: ['antibody', 'PP', 'PL-general', 'PL-refined', 'PN', 'docked-PL', 'docked-antibody', 'NL']
+  valid:
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/SAbDab
+      specify_index: ./datasets/SAbDab/valid.txt
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PL-refined
+      specify_index: ./datasets/PDBbind/PL-refined/valid.txt
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/PP
+      specify_index: ./datasets/PDBbind/PP/valid.txt
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_PDBbind
+      specify_index: ./datasets/docked_PDBbind/valid.txt
+      test_mode: true
+    - class: DockedDataset
+      mmap_dir: ./datasets/docked_SAbDab
+      specify_index: ./datasets/docked_SAbDab/valid.txt
+      pos_rmsd_th: 10.0
+      test_mode: true
+    - class: InterfaceDataset
+      mmap_dir: ./datasets/PDBbind/NL
+      specify_index: ./datasets/PDBbind/NL/valid.txt
+    - names: ['antibody', 'PL', 'PP', 'docked_PL', 'docked_antibody', 'NL']
+
+dataloader:
+  train:
+    shuffle: true
+    num_workers: 4
+    wrapper:
+      class: DynamicBatchWrapper
+      complexity: n*27 # KNN block graph with 3-edge sparsification
+      ubound_per_batch: 250000  # batch size ~16
+  valid:
+    num_workers: 4
+    wrapper:
+      class: DynamicBatchWrapper
+      complexity: n*27 # KNN block graph with 3-edge sparsification
+      ubound_per_batch: 500000  # batch size ~32
+
+trainer:
+  class: AffinityTrainer
+  config:
+    proj_name: Uni-dG
+    #logger: tensorboard
+    max_epoch: 200
+    save_topk: 10
+    val_freq: 1
+    save_dir: ./ckpts/GET_all_dataset
+    patience: 10
+    metric_min_better: true
+
+    optimizer:
+      class: AdamW
+      lr: 1.0e-4
+
+    scheduler:
+      class: ReduceLROnPlateau
+      factor: 0.6
+      patience: 3
+      mode: min
+      frequency: val_epoch
+      min_lr: 1.0e-6
+
+model:
+  class: AffinityModel
+  model_type: GET
+  hidden_size: 128
+  n_channel: 1
+  n_rbf: 32
+  cutoff: 8.0
+  n_head: 4
+  radial_size: 64
+  edge_size: 64
+  k_neighbors: 9
+  n_layers: 6
+  loss_weights:
+    regression: 0.4
+    classification: 0.6
