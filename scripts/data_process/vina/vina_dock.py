@@ -9,8 +9,8 @@ import multiprocessing as mp
 PREPR = '/share/medical_data/downstream/tools/vina/ADFRsuite-1.0/ADFRsuite_x86_64Linux_1.0/bin/prepare_receptor'
 
 # configs for flexible docking, deprecated
-PY27 = None # '/home/jiayinjun/miniconda3/envs/py27/bin/python'
-BCL = None # '/home/jiayinjun/flex_dock/bcl-4.3.1-Linux-x86_64/bcl.exe'
+PY27 = None # '/miniconda3/envs/py27/bin/python'
+BCL = None # '/bin/bcl-4.3.1-Linux-x86_64/bcl.exe'
 ROS = None # '/drug/rosetta.binary.linux.release-315/main'
 M2P = None # f'{ROS}/source/scripts/python/public/molfile_to_params.py'
 CLP = None # f'{ROS}/tools/protein_tools/scripts/clean_pdb.py'
@@ -221,7 +221,7 @@ def docking_pipeline(
             ligpose_pdbqt += ridig_poses.split('ENDMDL\n')[:-1]
             pose_engery[0] += ridig_energy
         except:
-            print(f'Error in docking ligand {name}')
+            if verbose: print(f'Error in docking ligand {name}')
     # ligpose_pdb = pdbqt2pdb(ligpose_pdbqt)
     # for name,pose in zip(ligpose_name,ligpose_pdb):
     #     with open(os.path.join(output_dir,os.path.basename(receptor_pdbqt).replace('.pdbqt',f'_{name}.pdb')), 'w') as f:
@@ -236,7 +236,7 @@ def docking_pipeline(
         if verbose: print('flexible docking...')
         os.chdir(output_dir)
         pool = mp.Pool(min(n_cpu,len(ligpose_name)))
-        tbar = tqdm(total=len(ligpose_name))
+        tbar = tqdm(total=len(ligpose_name), disable=not verbose)
         def update(s):
             pose_engery[1].append(s)
             tbar.update()
@@ -252,21 +252,3 @@ def docking_pipeline(
         for name,re,fe in zip(ligpose_name,pose_engery[0],pose_engery[1]):
             f.write(f'{name}\t{re}\t{fe}\n')
     return ligpose_name,pose_engery
-
-if  __name__ == '__main__':
-    with open('/home/jiayinjun/Drug_The_Whole_Genome/tmp/chembl.sdf','r') as f:
-        ligand_sdf_list = f.read().split('$$$$\n')[:-1]
-    ligand_sdf_list = [i+'$$$$\n' for i in ligand_sdf_list]    
-    docking_pipeline(
-        receptor_pdbqt = None,
-        ligand_sdf_list = ligand_sdf_list,
-        center=[160.46,173.97,147.77],
-        output_dir='/drug/tmp',
-        lig_name_list=None,
-        n_cpu=16,
-        exhaustiveness=32,
-        n_rigid=3,
-        flexible=True,
-        receptor_pdb='/home/jiayinjun/Drug_The_Whole_Genome/tmp/7WFR.pdb',
-        n_flexible=150,
-    )

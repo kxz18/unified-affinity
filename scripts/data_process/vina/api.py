@@ -1,7 +1,7 @@
 import os
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, queues
 
 from rdkit import Chem
 
@@ -65,11 +65,14 @@ class VinaDock:
             task = self.task_queue.get()
             if task is None:
                 break
+            success, error_msg = True, None
             try:
                 output = self.dock(task)
-                self.result_queue.put(output)
             except Exception as e:
-                self.result_queue.put((task, None, e))
+                success = False
+                error_msg = e
+            if success: self.result_queue.put(output)
+            else: self.result_queue.put((task, None, error_msg))
 
     def put(self, task: Task):
         assert not self.closed, f'This instance has been closed, please create a new one'
@@ -78,8 +81,30 @@ class VinaDock:
     def get(self):
         return self.result_queue.get()
     
+    def safe_get(self):
+        try:
+            res = self.result_queue.get_nowait()
+        except queues.Empty:
+            return None
+        return res
+    
     def finish_cnt(self):
         return self.result_queue.qsize()
+    
+    def process_cnt(self):
+        cnt = 0
+        for p in self.processes:
+            if p.is_alive(): cnt += 1
+        return cnt
+    
+    def repair_process(self):
+        for i, p in enumerate(self.processes):
+            if p.is_alive():
+                continue
+            p.join()
+            p = Process(target=self.worker)
+            self.processes[i] = p
+            p.start()
 
     def dock(self, task: Task):
         task.prepare_sdf()

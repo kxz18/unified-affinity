@@ -3,6 +3,7 @@
 import re
 import os
 import json
+import time
 import shutil
 import argparse
 
@@ -51,16 +52,18 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
     waiting_tasks = {}
 
     def write_results():
-        task, ligfiles, energies = vina_dock.get()
+        res = vina_dock.safe_get()
+        if res is None: return False
+        task, ligfiles, energies = res
         entry: Entry = None
         entry, current_out_dir = waiting_tasks.pop(task.id)
         os.system(f'cp {task.receptor_pdb} {current_out_dir}')
-        print_log(f'{task.id} finished\n')
+        print_log(f'{task.id} finished, {vina_dock.process_cnt()} processes alive')
         if ligfiles is None:
             logfile.write(f'{task.id}\tfailed')
             logfile.flush()
             shutil.rmtree(os.path.join(current_out_dir, 'vina_out'))
-            return
+            return True
 
         order = sorted([i for i in range(len(ligfiles))], key=lambda i: energies[0][i])
 
@@ -85,18 +88,26 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
         logfile.write(f'{task.id}\tsuccess\n')
         logfile.flush()
         shutil.rmtree(os.path.join(current_out_dir, 'vina_out'))
+        return True
 
     print_log('Adding tasks')
 
     for entry in tqdm(entries):
+        print_log(f'processing {entry}')
         current_out_dir = os.path.join(out_dir, entry.id)
+        if os.path.exists(os.path.join(current_out_dir, 'metadata.json')): # already finished
+            print_log(f'{entry.id} already finished, skip')
+            logfile.write(f'{entry.id}\tsuccess\n')
+            logfile.flush()
+            continue
         tmp_dir = os.path.join(current_out_dir, 'vina_out')
         os.makedirs(tmp_dir, exist_ok=True)
         prot_path = os.path.join(tmp_dir, 'receptor.pdb')
         os.system(f'cp {entry.pdb_path[0]} {prot_path}')
 
-        parsed_molecule = sdf_to_list_blocks(entry.pdb_path[1])
+        parsed_molecule = sdf_to_list_blocks(entry.pdb_path[1], silent=True)
         if len(parsed_molecule) == 0:
+            print_log(f'{entry.id} ligand parsing failed, skip')
             continue
         positive_blocks, positive_smi = parsed_molecule[0]
         neg_smiles = [smis[i] for i in np.random.choice(smi_idxs, size=neg_cnt, replace=False)]
@@ -115,13 +126,17 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
             n_rigid = 1
         ))
         waiting_tasks[entry.id] = (entry, current_out_dir)
-        print_log(f'{len(waiting_tasks)} proceeding, {vina_dock.finish_cnt()} waiting to be written')
-        if vina_dock.finish_cnt() > 0:
-            write_results()
+        print_log(f'{entry.id} appended, {len(waiting_tasks)} proceeding, {vina_dock.finish_cnt()} waiting to be written, {vina_dock.process_cnt()} processes alive.')
+        vina_dock.repair_process()
+        while write_results(): pass
 
     print_log(f'Submitted {len(waiting_tasks)} tasks')
 
     while len(waiting_tasks):
+        if vina_dock.finish_cnt() == 0:
+            time.sleep(10)
+            continue
+        vina_dock.repair_process()
         write_results()
     
     logfile.close()
