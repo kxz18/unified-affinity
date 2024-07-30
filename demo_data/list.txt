@@ -1,0 +1,2 @@
+5c7x_antibody_B_MN.pdb	B_MN
+6ueg_pro_lig_C_L.pdb	C_L
