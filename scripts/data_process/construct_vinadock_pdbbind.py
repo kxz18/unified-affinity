@@ -3,6 +3,7 @@
 import re
 import os
 import json
+import shutil
 import argparse
 
 from tqdm import tqdm
@@ -54,10 +55,11 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
         entry: Entry = None
         entry, current_out_dir = waiting_tasks.pop(task.id)
         os.system(f'cp {task.receptor_pdb} {current_out_dir}')
-        print_log(f'{task.id} finished')
+        print_log(f'{task.id} finished\n')
         if ligfiles is None:
             logfile.write(f'{task.id}\tfailed')
             logfile.flush()
+            shutil.rmtree(os.path.join(current_out_dir, 'vina_out'))
             return
 
         order = sorted([i for i in range(len(ligfiles))], key=lambda i: energies[0][i])
@@ -80,8 +82,9 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
             }
         with open(os.path.join(current_out_dir, 'metadata.json'), 'w') as fout:
             json.dump(metadata, fout, indent=2)
-        logfile.write(f'{task.id}\tsuccess')
+        logfile.write(f'{task.id}\tsuccess\n')
         logfile.flush()
+        shutil.rmtree(os.path.join(current_out_dir, 'vina_out'))
 
     print_log('Adding tasks')
 

@@ -67,10 +67,8 @@ class VinaDock:
                 break
             try:
                 output = self.dock(task)
-                print(f'{task} succeeded')
                 self.result_queue.put(output)
             except Exception as e:
-                print(f'{task} failed')
                 self.result_queue.put((task, None, e))
 
     def put(self, task: Task):
