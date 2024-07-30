@@ -6,7 +6,7 @@ import pickle as pk
 from tqdm import tqdm
 import multiprocessing as mp
 
-PREPR = '/share/medical_data/downstream/tools/vina/ADFRsuite-1.0/bin/prepare_receptor'
+PREPR = '/share/medical_data/downstream/tools/vina/ADFRsuite-1.0/ADFRsuite_x86_64Linux_1.0/bin/prepare_receptor'
 
 # configs for flexible docking, deprecated
 PY27 = None # '/home/jiayinjun/miniconda3/envs/py27/bin/python'

@@ -65,8 +65,13 @@ class VinaDock:
             task = self.task_queue.get()
             if task is None:
                 break
-            output = self.dock(task)
-            self.result_queue.put(output)
+            try:
+                output = self.dock(task)
+                print(f'{task} succeeded')
+                self.result_queue.put(output)
+            except Exception as e:
+                print(f'{task} failed')
+                self.result_queue.put((task, None, e))
 
     def put(self, task: Task):
         assert not self.closed, f'This instance has been closed, please create a new one'
@@ -95,6 +100,8 @@ class VinaDock:
             verbose=task.verbose
         )
         liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
+        if liganmes is None:
+            return (task, None, energies)
         ligfiles = []
         receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
         basename = os.path.splitext(os.path.basename(receptor_file))[0]
