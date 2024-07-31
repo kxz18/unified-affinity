@@ -58,7 +58,8 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
         entry: Entry = None
         entry, current_out_dir = waiting_tasks.pop(task.id)
         os.system(f'cp {task.receptor_pdb} {current_out_dir}')
-        print_log(f'{task.id} finished, {vina_dock.process_cnt()} processes alive')
+        # print_log(f'{task.id} finished, {vina_dock.process_cnt()} processes alive')
+        print_log(f'{task.id} finished')
         if ligfiles is None:
             logfile.write(f'{task.id}\tfailed')
             logfile.flush()
@@ -105,7 +106,7 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
         prot_path = os.path.join(tmp_dir, 'receptor.pdb')
         os.system(f'cp {entry.pdb_path[0]} {prot_path}')
 
-        parsed_molecule = sdf_to_list_blocks(entry.pdb_path[1], silent=True)
+        parsed_molecule = sdf_to_list_blocks(entry.pdb_path[1], silent=True, stop_parallel=True) # no parallel, otherwise dead lock might occur since the vinadock is already using parallel
         if len(parsed_molecule) == 0:
             print_log(f'{entry.id} ligand parsing failed, skip')
             continue
@@ -126,18 +127,17 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
             n_rigid = 1
         ))
         waiting_tasks[entry.id] = (entry, current_out_dir)
-        print_log(f'{entry.id} appended, {len(waiting_tasks)} proceeding, {vina_dock.finish_cnt()} waiting to be written, {vina_dock.process_cnt()} processes alive.')
-        vina_dock.repair_process()
+        print_log(f'{entry.id} appended, {vina_dock.unfinish_cnt()} proceeding, {vina_dock.finish_cnt()} waiting to be written')
+        # vina_dock.repair_process()
         while write_results(): pass
 
     print_log(f'Submitted {len(waiting_tasks)} tasks')
 
-    while len(waiting_tasks):
-        if vina_dock.finish_cnt() == 0:
-            time.sleep(10)
-            continue
-        vina_dock.repair_process()
-        write_results()
+    while vina_dock.unfinish_cnt():
+        # vina_dock.repair_process()
+        while write_results(): pass
+        time.sleep(10)
+        print_log(f'Waiting...{vina_dock.unfinish_cnt()} remains.')
     
     logfile.close()
 

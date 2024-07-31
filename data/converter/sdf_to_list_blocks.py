@@ -6,7 +6,7 @@ from data.format import Block, Atom, VOCAB
 from p_tqdm import p_map
 from .rdkit_to_blocks import rdkit_to_blocks
 
-def sdf_to_list_blocks(sdf_file: str, using_hydrogen: bool = False, dict_form: bool=False, silent: bool=False) -> List[Tuple[List[Block], str]]:
+def sdf_to_list_blocks(sdf_file: str, using_hydrogen: bool = False, dict_form: bool=False, silent: bool=False, stop_parallel: bool=False) -> List[Tuple[List[Block], str]]:
     '''
         Convert an SDF file to a list of lists of blocks for each molecule in parallel.
         
@@ -30,7 +30,10 @@ def sdf_to_list_blocks(sdf_file: str, using_hydrogen: bool = False, dict_form: b
             return None
 
     # Parallel processing of molecules
-    results = p_map(process_molecule, supplier, disable=silent)
+    if stop_parallel:
+        results = [process_molecule(m) for m in supplier]
+    else:
+        results = p_map(process_molecule, supplier, disable=silent)
     smiles = [Chem.MolToSmiles(mol) if mol is not None else None for mol in supplier]
 
     if dict_form:

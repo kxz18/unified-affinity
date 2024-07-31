@@ -3,6 +3,7 @@ from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from multiprocessing import Process, Queue, queues
 
+import ray
 from rdkit import Chem
 
 from .vina_dock import docking_pipeline
@@ -40,6 +41,35 @@ class Task:
             ligand_sdf_list = f.read().split('$$$$\n')[:-1]
         self.ligand_sdf_list = [i+'$$$$\n' for i in ligand_sdf_list]
 
+@ray.remote(num_cpus=1)
+def remote_worker(task: Task):
+    task.prepare_sdf()
+    output = docking_pipeline(
+        receptor_pdbqt = task.receptor_pdbqt,
+        ligand_sdf_list = task.ligand_sdf_list,
+        center=task.center,
+        output_dir=task.output_dir,
+        lig_name_list=task.lig_name_list,
+        n_cpu=task.n_cpu,
+        exhaustiveness=task.exhaustiveness,
+        n_rigid=task.n_rigid,
+        flexible=task.flexible,
+        receptor_pdb=task.receptor_pdb,
+        n_flexible=task.n_flexible,
+        verbose=task.verbose
+    )
+    liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
+    if liganmes is None:
+        return (task, None, energies)
+    ligfiles = []
+    receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
+    basename = os.path.splitext(os.path.basename(receptor_file))[0]
+    for name in liganmes:
+        ligfiles.append(os.path.join(task.output_dir, f'{basename}_{name}.sdf'))
+    ligfiles = ligfiles[:len(energies[0])]
+    return (task, ligfiles, energies) # sorted by energy
+
+
 
 class VinaDock:
     def __init__(self, num_workers: int=8) -> None:
@@ -47,99 +77,92 @@ class VinaDock:
             num_workers: number of workers. The number of CPUs used by each
                 worker can be set in each task by n_cpu
         '''
-        self.task_queue = Queue()
-        self.result_queue = Queue()
+        ray.init(num_cpus=num_workers)
 
-        # Create worker processes
-        self.processes = []
-        for _ in range(num_workers):
-            p = Process(target=self.worker)
-            self.processes.append(p)
-            p.start()
+        self.tasks = []
+        self.done_ids = []
 
         self.closed = False
 
-    def worker(self):
-        """Worker process to perform structure prediction on a given GPU."""
-        while True:
-            task = self.task_queue.get()
-            if task is None:
-                break
-            success, error_msg = True, None
-            try:
-                output = self.dock(task)
-            except Exception as e:
-                success = False
-                error_msg = e
-            if success: self.result_queue.put(output)
-            else: self.result_queue.put((task, None, error_msg))
+    # def worker(self):
+    #     """Worker process to perform structure prediction on a given GPU."""
+    #     while True:
+    #         task = self.task_queue.get()
+    #         if task is None:
+    #             break
+    #         success, error_msg = True, None
+    #         try:
+    #             output = self.dock(task)
+    #         except Exception as e:
+    #             success = False
+    #             error_msg = e
+    #         if success: self.result_queue.put(output)
+    #         else: self.result_queue.put((task, None, error_msg))
 
     def put(self, task: Task):
         assert not self.closed, f'This instance has been closed, please create a new one'
-        self.task_queue.put(task)
+        # self.task_queue.put(task)
+        self.tasks.append(remote_worker.remote(task))
+
+    def _update_done_ids_no_block(self):
+        if len(self.done_ids) > 0:
+            return
+        self.done_ids, self.tasks = ray.wait(self.tasks, timeout=0.1)
 
     def get(self):
-        return self.result_queue.get()
+        if len(self.done_ids) == 0:
+            self.done_ids, self.tasks = ray.wait(self.tasks, num_returns=1)
+        result = ray.get(self.done_ids[-1])
+        self.done_ids = self.done_ids[:-1]
+        return result
     
     def safe_get(self):
-        try:
-            res = self.result_queue.get_nowait()
-        except queues.Empty:
-            return None
-        return res
+        self._update_done_ids_no_block()
+        if len(self.done_ids) > 0:
+            return self.get()
+        return None
     
     def finish_cnt(self):
-        return self.result_queue.qsize()
+        self._update_done_ids_no_block()
+        return len(self.done_ids)
     
-    def process_cnt(self):
-        cnt = 0
-        for p in self.processes:
-            if p.is_alive(): cnt += 1
-        return cnt
+    def unfinish_cnt(self):
+        return len(self.tasks)
     
-    def repair_process(self):
-        for i, p in enumerate(self.processes):
-            if p.is_alive():
-                continue
-            p.join()
-            p = Process(target=self.worker)
-            self.processes[i] = p
-            p.start()
+    # def dock(self, task: Task):
+    #     task.prepare_sdf()
+    #     output = docking_pipeline(
+    #         receptor_pdbqt = task.receptor_pdbqt,
+    #         ligand_sdf_list = task.ligand_sdf_list,
+    #         center=task.center,
+    #         output_dir=task.output_dir,
+    #         lig_name_list=task.lig_name_list,
+    #         n_cpu=task.n_cpu,
+    #         exhaustiveness=task.exhaustiveness,
+    #         n_rigid=task.n_rigid,
+    #         flexible=task.flexible,
+    #         receptor_pdb=task.receptor_pdb,
+    #         n_flexible=task.n_flexible,
+    #         verbose=task.verbose
+    #     )
+    #     liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
+    #     if liganmes is None:
+    #         return (task, None, energies)
+    #     ligfiles = []
+    #     receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
+    #     basename = os.path.splitext(os.path.basename(receptor_file))[0]
+    #     for name in liganmes:
+    #         ligfiles.append(os.path.join(task.output_dir, f'{basename}_{name}.sdf'))
+    #     ligfiles = ligfiles[:len(energies[0])]
+    #     return (task, ligfiles, energies) # sorted by energy
 
-    def dock(self, task: Task):
-        task.prepare_sdf()
-        output = docking_pipeline(
-            receptor_pdbqt = task.receptor_pdbqt,
-            ligand_sdf_list = task.ligand_sdf_list,
-            center=task.center,
-            output_dir=task.output_dir,
-            lig_name_list=task.lig_name_list,
-            n_cpu=task.n_cpu,
-            exhaustiveness=task.exhaustiveness,
-            n_rigid=task.n_rigid,
-            flexible=task.flexible,
-            receptor_pdb=task.receptor_pdb,
-            n_flexible=task.n_flexible,
-            verbose=task.verbose
-        )
-        liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
-        if liganmes is None:
-            return (task, None, energies)
-        ligfiles = []
-        receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
-        basename = os.path.splitext(os.path.basename(receptor_file))[0]
-        for name in liganmes:
-            ligfiles.append(os.path.join(task.output_dir, f'{basename}_{name}.sdf'))
-        ligfiles = ligfiles[:len(energies[0])]
-        return (task, ligfiles, energies) # sorted by energy
+    # def close(self):
+    #     # for p in self.processes: self.task_queue.put(None)
+    #     # for p in self.processes: p.join()
+    #     self.closed = True
 
-    def close(self):
-        for p in self.processes: self.task_queue.put(None)
-        for p in self.processes: p.join()
-        self.closed = True
-
-    def __del__(self):
-        if not self.closed: self.close()
+    # def __del__(self):
+    #     if not self.closed: self.close()
 
 
 if __name__ == '__main__':
