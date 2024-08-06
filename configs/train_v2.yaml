@@ -26,7 +26,7 @@ dataset:
     # 2k positive + 20k negative
     - class: DockedDataset
       mmap_dir: ./datasets/vinadocked_PDBbind
-      specify_index: ./datasets/vinadocked_PDBbind/train.txt
+      specify_index: ./datasets/vinadocked_PDBbind/train.txt.cleaned
       negative_rate: 0.8
     # 621 positive + 6.2k negative (dataset length 621)
     - class: DockedDataset
@@ -57,7 +57,7 @@ dataset:
       test_mode: true
     - class: DockedDataset
       mmap_dir: ./datasets/vinadocked_PDBbind
-      specify_index: ./datasets/vinadocked_PDBbind/valid.txt
+      specify_index: ./datasets/vinadocked_PDBbind/valid.txt.cleaned
       test_mode: true
     - class: DockedDataset
       mmap_dir: ./datasets/docked_SAbDab
