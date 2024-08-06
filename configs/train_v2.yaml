@@ -67,7 +67,7 @@ dataset:
     - class: InterfaceDataset
       mmap_dir: ./datasets/PDBbind/NL
       specify_index: ./datasets/PDBbind/NL/valid.txt
-    - names: ['antibody', 'PL', 'PP', 'docked_PL', 'docked_antibody', 'NL']
+    - names: ['antibody', 'PL', 'PP', 'docked_PL', 'vinadocked_PL', 'docked_antibody', 'NL']
 
 dataloader:
   train:
