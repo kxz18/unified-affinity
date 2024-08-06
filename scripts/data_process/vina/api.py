@@ -43,31 +43,34 @@ class Task:
 
 @ray.remote(num_cpus=1)
 def remote_worker(task: Task):
-    task.prepare_sdf()
-    output = docking_pipeline(
-        receptor_pdbqt = task.receptor_pdbqt,
-        ligand_sdf_list = task.ligand_sdf_list,
-        center=task.center,
-        output_dir=task.output_dir,
-        lig_name_list=task.lig_name_list,
-        n_cpu=task.n_cpu,
-        exhaustiveness=task.exhaustiveness,
-        n_rigid=task.n_rigid,
-        flexible=task.flexible,
-        receptor_pdb=task.receptor_pdb,
-        n_flexible=task.n_flexible,
-        verbose=task.verbose
-    )
-    liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
-    if liganmes is None:
-        return (task, None, energies)
-    ligfiles = []
-    receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
-    basename = os.path.splitext(os.path.basename(receptor_file))[0]
-    for name in liganmes:
-        ligfiles.append(os.path.join(task.output_dir, f'{basename}_{name}.sdf'))
-    ligfiles = ligfiles[:len(energies[0])]
-    return (task, ligfiles, energies) # sorted by energy
+    try:
+        task.prepare_sdf()
+        output = docking_pipeline(
+            receptor_pdbqt = task.receptor_pdbqt,
+            ligand_sdf_list = task.ligand_sdf_list,
+            center=task.center,
+            output_dir=task.output_dir,
+            lig_name_list=task.lig_name_list,
+            n_cpu=task.n_cpu,
+            exhaustiveness=task.exhaustiveness,
+            n_rigid=task.n_rigid,
+            flexible=task.flexible,
+            receptor_pdb=task.receptor_pdb,
+            n_flexible=task.n_flexible,
+            verbose=task.verbose
+        )
+        liganmes, energies = output # energies have two lists: one for rigid results, one for flexible results
+        if liganmes is None:
+            return (task, None, energies)
+        ligfiles = []
+        receptor_file = task.receptor_pdb if task.receptor_pdbqt is None else task.receptor_pdbqt
+        basename = os.path.splitext(os.path.basename(receptor_file))[0]
+        for name in liganmes:
+            ligfiles.append(os.path.join(task.output_dir, f'{basename}_{name}.sdf'))
+        ligfiles = ligfiles[:len(energies[0])]
+        return (task, ligfiles, energies) # sorted by energy
+    except Exception as e:
+        return (task, None, e)
 
 
 

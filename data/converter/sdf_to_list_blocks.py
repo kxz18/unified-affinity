@@ -38,7 +38,7 @@ def sdf_to_list_blocks(sdf_file: str, using_hydrogen: bool = False, dict_form: b
 
     if dict_form:
         # Get names
-        names = [mol.GetProp('_Name') for mol in supplier]
+        names = [mol.GetProp('_Name') if mol is not None else None for mol in supplier]
         results_dict = {}
         for n, r, smi in zip(names, results, smiles):
             if r is None: continue

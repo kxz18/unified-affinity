@@ -61,7 +61,8 @@ def dock(vina_dock: VinaDock, entries, smis, out_dir, neg_cnt=10):
         # print_log(f'{task.id} finished, {vina_dock.process_cnt()} processes alive')
         print_log(f'{task.id} finished')
         if ligfiles is None:
-            logfile.write(f'{task.id}\tfailed')
+            print_log(f'{task.id} failed: {energies}')
+            logfile.write(f'{task.id}\tfailed\n')
             logfile.flush()
             shutil.rmtree(os.path.join(current_out_dir, 'vina_out'))
             return True

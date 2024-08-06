@@ -4,7 +4,7 @@ import sys
 import numpy as np
 np.random.seed(0)
 
-valid_size = 10
+valid_size = 200
 
 pl_test = os.path.join('test_sets', 'protein_ligand.txt')
 ab_test = os.path.join('test_sets', 'antibody.txt')
@@ -18,7 +18,8 @@ datasets = [
     # (os.path.join('PDBbind', 'PP'), False, pp_test), # no need to split test
     # ('SAbDab', True, ab_test),
     # ('PPAB', False, ab_test), # training is pp, test is ab, manually change the name 
-    (os.path.join('PDBbind', 'NL'), True, nl_test)
+    # (os.path.join('PDBbind', 'NL'), True, nl_test)
+    ('vinadocked_PDBbind', True, pl_test)
 ]
 
 root_dir = sys.argv[1]
