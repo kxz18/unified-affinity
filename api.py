@@ -125,7 +125,7 @@ def main(args):
     # print results
     print()
     print('=' * 10 + 'Results' + '=' * 10)
-    print('pdb\tpKd\tKd(nM)\tconfidence')
+    print('pdb\tpKd\tKd(nM)\tbinding_confidence')
     for i, pkd, conf in zip(ids, pkds, confs):
         kd = 10**(-pkd) * (10**9) # unit: nm
         print(f'{i}\t{round(pkd, 3)}\t{round(kd, 3)}\t{round(conf, 3)}')

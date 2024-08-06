@@ -37,6 +37,17 @@ For inference on single complex (e.g.):
 python api.py --complex_pdb demo_data/5c7x_antibody_B_MN.pdb --split_chains B_MN --gpu 0
 ```
 
+Example output:
+
+```bash
+2024-08-06 11:58:38::INFO::Infering data from demo_data/5c7x_antibody_B_MN.pdb
+2024-08-06 11:58:38::INFO::Using checkpoints: ['./checkpoints/model0.ckpt', './checkpoints/model1.ckpt', './checkpoints/model2.ckpt']
+
+==========Results==========
+pdb     pKd     Kd(nM)  binding_confidence
+demo_data/5c7x_antibody_B_MN.pdb        11.052  0.009   0.901
+```
+
 For inference on batch complexes (e.g.):
 
 ```bash
@@ -51,4 +62,18 @@ where the contents of the `demo_data/list.txt` contains lines of pdbs and splits
 6ueg_pro_lig_C_L.pdb    C_L
 ```
 
-**WARNING**: Note that for complexes incorporating small molecules, the molecule should be separated into a different chain from its receptor (which is not the convention for most pdbs), and included in one single residue.
+Example output:
+
+```bash
+2024-08-06 11:59:31::INFO::Infering data from demo_data/list.txt
+2024-08-06 11:59:31::INFO::Using checkpoints: ['./checkpoints/model0.ckpt', './checkpoints/model1.ckpt', './checkpoints/model2.ckpt']
+
+==========Results==========
+pdb     pKd     Kd(nM)  binding_confidence
+/disks/disk5/private/kxz/unified-affinity/demo_data/5c7x_antibody_B_MN.pdb      11.052  0.009   0.901
+/disks/disk5/private/kxz/unified-affinity/demo_data/6ueg_pro_lig_C_L.pdb        3.585   259952.278      0.597
+```
+
+**WARNING1**: Note that for complexes incorporating small molecules, the molecule should be separated into a different chain from its receptor (which is not the convention for most pdbs), and included in one single residue.
+
+**WARNING2**: Only when the confidence is high (e.g. above 0.7), the predicted Kd is meaningful. Otherwise there might be no binding between these two molecules.
