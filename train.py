@@ -33,6 +33,12 @@ def parse():
     return parser.parse_known_args()
 
 
+def load_ckpt(model, ckpt):
+    trained_model = torch.load(ckpt, map_location='cpu')
+    model.load_state_dict(trained_model.state_dict())
+    return model
+
+
 def main(args, opt_args):
 
     # load config
@@ -41,6 +47,8 @@ def main(args, opt_args):
 
     ########## define your model #########
     model = R.construct(config['model'])
+    if 'load_ckpt' in config:
+        model = load_ckpt(model, config['load_ckpt'])
 
     ########### load your train / valid set ###########
     train_set, valid_set, _ = create_dataset(config['dataset'])

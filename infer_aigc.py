@@ -22,12 +22,15 @@ CHECKPOINTS = [
 ]
 
 
+STYPES = ['raw', 'openmm_relax', 'rosetta_relax', 'openmm_foldx_relax']
+
 def parse():
     parser = argparse.ArgumentParser(description='Inferencing pKd of arbitrary complexes')
     parser.add_argument('--structures', type=str, nargs='+', required=True)
     parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--ckpts', type=str, nargs='+', default=CHECKPOINTS, help='Specify checkpoints to use')
     parser.add_argument('--gpu', type=int, default=0, help='GPU to use')
+    parser.add_argument('--stypes', type=str, nargs='+', default=None, choices=STYPES)
     return parser.parse_args()
 
 
@@ -79,7 +82,8 @@ def main(args):
     device = torch.device('cpu' if args.gpu < 0 else f'cuda:{args.gpu}')
     for model in models: model.to(device)
 
-    struct_type = ['raw', 'openmm_relax', 'rosetta_relax', 'openmm_foldx_relax']
+    if args.stypes is None: struct_type = STYPES
+    else: struct_type = args.stypes
 
     for path in args.structures:
 

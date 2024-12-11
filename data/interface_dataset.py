@@ -32,14 +32,13 @@ class InterfaceDataset(MMAPDataset):
         ) -> None:
         super().__init__(mmap_dir, specify_data, specify_index)
         self.mmap_dir = mmap_dir
-        self._lengths = [int(props[0]) for props in self._properties]
         self.metadata = [EasyDict(ast.literal_eval(props[1])) for props in self._properties]
 
     def get_id(self, idx: int):
         return self.metadata[idx].id
 
     def get_len(self, idx: int):
-        return self._lengths[idx]
+        return int(self._properties[idx][0])
 
     def get_summary(self, idx: int):
         return self.metadata[idx]

@@ -11,11 +11,15 @@ import matplotlib.pyplot as plt
 from visualize.lineplot import lineplot
 
 
+STYPES = ['raw', 'openmm_relax', 'rosetta_relax', 'openmm_foldx_relax']
+
+
 def parse():
     parser = argparse.ArgumentParser(description='positive rate curve')
     parser.add_argument('--datasets', type=str, nargs='+', required=True)
     parser.add_argument('--out_dir', type=str, default=os.path.join(os.path.dirname(__file__), 'images', 'curve'))
     parser.add_argument('--model_results', type=str, default=None, nargs='+')
+    parser.add_argument('--stypes', type=str, nargs='+', default=None, choices=STYPES)
     return parser.parse_args()
 
 
@@ -113,7 +117,9 @@ def main(args):
         'rosetta': { 'target': [] },
         'foldx': { 'target': [] }
     }
-    struct_types = ['raw', 'openmm_relax', 'rosetta_relax', 'openmm_foldx_relax']
+    if args.stypes is None: struct_types = STYPES
+    else: struct_types = args.stypes
+    
     if args.model_results is not None:
         for path in args.model_results:
             model_name = os.path.basename(path.strip(os.path.sep))

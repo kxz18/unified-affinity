@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
 from .interface_dataset import InterfaceDataset
+from .wetlab_dataset import WetlabDataset
 from .docked_dataset import DockedDataset
 from .dataset_wrapper import MixDatasetWrapper
 
