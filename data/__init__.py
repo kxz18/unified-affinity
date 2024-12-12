@@ -3,6 +3,7 @@
 from .interface_dataset import InterfaceDataset
 from .wetlab_dataset import WetlabDataset
 from .docked_dataset import DockedDataset
+from .struct_dataset import StructDataset
 from .dataset_wrapper import MixDatasetWrapper
 
 import torch
