@@ -3,6 +3,7 @@
 import utils.register as R
 
 from .affinity_trainer import AffinityTrainer
+from .confidence_trainer import ConfidenceTrainer
 
 
 def create_trainer(config, model, train_loader, valid_loader):
