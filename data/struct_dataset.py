@@ -7,6 +7,7 @@ from typing import Optional
 
 from easydict import EasyDict
 import torch
+import numpy as np
 
 from data.format import Block
 from utils import register as R
@@ -22,11 +23,48 @@ Suitable for:
     - SAbDab
 '''
 
+
+def resample_with_rmsd(rmsds, n_bins=50, min_val=0, max_val=10):
+    rmsds = np.array(rmsds)
+    bins = np.linspace(min_val, max_val, num=n_bins+1)
+    rmsds = np.digitize(rmsds, bins, right=False)
+    cnts = np.bincount(rmsds)
+    p = 1 / (cnts + 1e-5)
+    p[cnts == 0] = 0
+    p = p / p.sum()
+    idx = np.arange(len(rmsds))
+    p = p[rmsds]
+    p = p / p.sum()
+
+    return np.random.choice(idx, size=len(rmsds), replace=True, p=p).tolist()
+
+
 @R.register('StructDataset')
 class StructDataset(InterfaceDataset):
 
+    def __init__(self, mmap_dir, specify_data = None, specify_index = None, resample = False):
+        super().__init__(mmap_dir, specify_data, specify_index)
+        self.dynamic_idx = [i for i in range(len(self))]
+        self.resample = resample
+        self.update_epoch()
+
     def get_id(self, idx):
+        idx = self.dynamic_idx[idx]
         return self._indexes[idx][0]
+    
+    def get_len(self, idx: int):
+        idx = self.dynamic_idx[idx]
+        return int(self._properties[idx][0])
+
+    def get_summary(self, idx: int):
+        idx = self.dynamic_idx[idx]
+        return self.metadata[idx]
+
+    def update_epoch(self):
+        if not self.resample: return
+        rmsds = [metadata.rmsd for metadata in self.metadata]
+        self.dynamic_idx = resample_with_rmsd(rmsds)
+
 
     def __getitem__(self, idx: int):
         '''
@@ -41,6 +79,7 @@ class StructDataset(InterfaceDataset):
             'label': [1]
         }
         '''
+        idx = self.dynamic_idx[idx]
         rec_blocks_tuple, lig_blocks_tuple = super(InterfaceDataset, self).__getitem__(idx)
         rec_blocks = [Block.from_tuple(tup) for tup in rec_blocks_tuple]
         lig_blocks = [Block.from_tuple(tup) for tup in lig_blocks_tuple]
@@ -54,6 +93,6 @@ class StructDataset(InterfaceDataset):
 
 if __name__ == '__main__':
     import sys
-    dataset = StructDataset(sys.argv[1])
+    dataset = StructDataset(sys.argv[1], resample=True)
     print(dataset[0])
     print(dataset.get_id(0))

@@ -55,7 +55,7 @@ class ConfidenceTrainer(Trainer):
 
         for name in name2pred:
             pred, target = torch.stack(name2pred[name]), torch.stack(name2label[name])
-            binding_mask = target < 90
+            binding_mask = target < 5
 
             # on positive data
             pred, target = pred[binding_mask], target[binding_mask]
@@ -84,7 +84,8 @@ class ConfidenceTrainer(Trainer):
             self.log(f'precision/{name}', prec, None, val=True)
             self.log(f'recall/{name}', recall, None, val=True)
 
-        return super()._aggregate_val_metric(metric_arr)
+        # return super()._aggregate_val_metric(metric_arr)
+        return prec
 
     ########## Override end ##########
 
