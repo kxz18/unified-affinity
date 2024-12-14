@@ -54,10 +54,11 @@ def resample_with_binary(rmsds, th):
 @R.register('StructDataset')
 class StructDataset(InterfaceDataset):
 
-    def __init__(self, mmap_dir, specify_data = None, specify_index = None, resample = False):
+    def __init__(self, mmap_dir, specify_data = None, specify_index = None, resample = False, residue_level = False):
         super().__init__(mmap_dir, specify_data, specify_index)
         self.dynamic_idx = [i for i in range(len(self))]
         self.resample = resample
+        self.residue_level = residue_level
         self.update_epoch()
 
     def get_id(self, idx):
@@ -74,9 +75,12 @@ class StructDataset(InterfaceDataset):
 
     def update_epoch(self):
         if not self.resample: return
-        rmsds = [metadata.rmsd for metadata in self.metadata]
+        rmsds = [self._total_rmsd(metadata.rmsd) for metadata in self.metadata]
         self.dynamic_idx = resample_with_rmsd(rmsds)
-
+    
+    def _total_rmsd(self, rmsd):
+        if isinstance(rmsd, float) or rmsd is None: return rmsd
+        return rmsd[0] # (rmsd, residue_rmsd)
 
     def __getitem__(self, idx: int):
         '''
@@ -98,9 +102,40 @@ class StructDataset(InterfaceDataset):
         item = blocks_to_data_simple(rec_blocks, lig_blocks)
         
         rmsd = self.metadata[idx].rmsd
-        if not isinstance(rmsd, float): rmsd = 100.0 # negative
-        item['label'] = rmsd
+        if self.residue_level:
+            item['label'] = torch.tensor(rmsd[1], dtype=torch.float)
+            assert len(item['label']) == len(lig_blocks)
+            item['agg_label'] = rmsd[0]
+        else:
+            # if not isinstance(rmsd, float): rmsd = 100.0 # negative
+            if rmsd is None: rmsd = 100.0 # negative
+            elif isinstance(rmsd, tuple): rmsd = rmsd[0]
+            item['label'] = rmsd
+            item['agg_label'] = rmsd
         return item
+    
+    def collate_fn(self, batch):
+        results = {}
+        for key in batch[0]:
+            values = [item[key] for item in batch]
+            if values[0] is None:
+                results[key] = None
+                continue
+            if key == 'lengths':
+                results[key] = torch.tensor(values, dtype=torch.long)
+            elif key == 'label':
+                if self.residue_level:
+                    results[key] = torch.cat(values, dim=0)
+                else:
+                    results[key] = torch.tensor(values, dtype=torch.float)
+            elif key == 'agg_label':
+                results[key] = torch.tensor(values, dtype=torch.float)
+            else:
+                try:
+                    results[key] = torch.cat(values, dim=0)
+                except RuntimeError:
+                    print(key, [v.shape for v in values])
+        return results
 
 
 @R.register('BinaryDataset')
@@ -128,8 +163,12 @@ class BinaryDataset(InterfaceDataset):
 
     def update_epoch(self):
         if not self.resample: return
-        rmsds = [metadata.rmsd for metadata in self.metadata]
+        rmsds = [self._total_rmsd(metadata.rmsd) for metadata in self.metadata]
         self.dynamic_idx = resample_with_binary(rmsds, self.pos_th)
+
+    def _total_rmsd(self, rmsd):
+        if isinstance(rmsd, float) or rmsd is None: return rmsd
+        return rmsd[0] # (rmsd, residue_rmsd)
 
     def __getitem__(self, idx: int):
         '''
@@ -150,7 +189,7 @@ class BinaryDataset(InterfaceDataset):
         lig_blocks = [Block.from_tuple(tup) for tup in lig_blocks_tuple]
         item = blocks_to_data_simple(rec_blocks, lig_blocks)
         
-        rmsd = self.metadata[idx].rmsd
+        rmsd = self._total_rmsd(self.metadata[idx].rmsd)
         if not isinstance(rmsd, float): rmsd = 100.0 # negative
         item['label'] = rmsd < self.pos_th
         return item

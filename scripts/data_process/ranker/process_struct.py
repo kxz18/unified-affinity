@@ -7,6 +7,7 @@ import ast
 import argparse
 from dataclasses import dataclass
 from typing import List
+from time import sleep
 
 import ray
 import numpy as np
@@ -55,7 +56,11 @@ def refid2ligchain(index):
     return id2chain
 
 
-def parse_index(data_dir, index):
+def parse_index(data_dir, index, visited):
+
+    with open(os.path.join(data_dir, 'log.txt'), 'r') as fin:
+        lines = fin.read().strip().split('\n')
+    finish_dirs = { line.split('\t')[0]: True for line in lines }
 
     id2chain = refid2ligchain(index)
     ref_dir = os.path.dirname(index)
@@ -63,11 +68,15 @@ def parse_index(data_dir, index):
     entries = []
 
     for d in os.listdir(data_dir):
+        if d not in finish_dirs: continue
         summary = os.path.join(data_dir, d, 'candidates', 'summary.jsonl')
         if not os.path.exists(summary): continue
         with open(summary, 'r') as fin: lines = fin.readlines()
         for line in lines:
             item = json.loads(line)
+            _id = item['id']
+            if _id in visited: continue
+            visited[_id] = True
             entries.append(Entry(
                 id=item['id'],
                 pdb_path=os.path.join(data_dir, d, 'candidates', item['id'] + '.pdb'),
@@ -77,6 +86,8 @@ def parse_index(data_dir, index):
                 ref_lig_chain=id2chain[d],
                 sequence=item['pep_seq']
             ))
+
+    np.random.shuffle(entries)
 
     return entries
 
@@ -105,6 +116,19 @@ def worker(inputs):
                 gen_all_x.append(gen_block.get_unit_by_name(ref_atom.name).get_coord())
     rmsd = compute_rmsd(np.array(gen_all_x), np.array(ref_all_x), aligned=True)
 
+    # aa level rmsd
+    aa_rmsd = []
+    for gen_block, ref_block in zip(lig_blocks, ref_lig_blocks):
+        gen_all_x, ref_all_x = [], []
+        for ref_atom in ref_block:
+            if gen_block.has_unit(ref_atom.name):
+                ref_all_x.append(ref_atom.get_coord())
+                gen_all_x.append(gen_block.get_unit_by_name(ref_atom.name).get_coord())
+        if len(gen_all_x):
+            rmsd = compute_rmsd(np.array(gen_all_x), np.array(ref_all_x), aligned=True)
+        else: rmsd = None
+        aa_rmsd.append(rmsd)
+
     rec_blocks = []
     for c in entry.rec_chains: rec_blocks.extend(gen_chain2blocks[c])
 
@@ -121,24 +145,47 @@ def worker(inputs):
     for block in rec_blocks: n_atoms += len(block)
     for block in lig_blocks: n_atoms += len(block)
 
-    return entry, data, rmsd, n_atoms
+    return entry, data, (rmsd, aa_rmsd), n_atoms
 
 
-def process_iterator(entries: List[Entry], interface_dist: float, n_cpus: int=8):
+def process_iterator(data_dir, ref_index, interface_dist: float, n_cpus: int=8):
 
     cnt = 0
-    for entry in entries:
-        res = worker((entry, interface_dist))
-        cnt += 1
-        if res is None: continue
-        entry, data, rmsd, n_atoms = res
-        props = {
-            'rmsd': rmsd,
-            'rec_chains': entry.rec_chains,
-            'lig_chain': entry.lig_chain,
-            'sequence': entry.sequence
-        }
-        yield entry.id, data, [n_atoms, props], cnt
+
+    visited = {}
+
+    entries = parse_index(data_dir, ref_index, visited)
+
+    while len(entries) > 0:
+        print_log(f'submitted {len(entries)} entries')
+        for entry in entries:
+            res = worker((entry, interface_dist))
+            cnt += 1
+            if res is None: continue
+            entry, data, rmsd, n_atoms = res
+            props = {
+                'rmsd': rmsd,
+                'rec_chains': entry.rec_chains,
+                'lig_chain': entry.lig_chain,
+                'sequence': entry.sequence
+            }
+            yield entry.id, data, [n_atoms, props], cnt
+        
+        sleep(30 * 60)
+        entries = parse_index(data_dir, ref_index, visited)
+    # cnt = 0
+    # for entry in entries:
+    #     res = worker((entry, interface_dist))
+    #     cnt += 1
+    #     if res is None: continue
+    #     entry, data, rmsd, n_atoms = res
+    #     props = {
+    #         'rmsd': rmsd,
+    #         'rec_chains': entry.rec_chains,
+    #         'lig_chain': entry.lig_chain,
+    #         'sequence': entry.sequence
+    #     }
+    #     yield entry.id, data, [n_atoms, props], cnt
        
 
     # ray.init(num_cpus=n_cpus)
@@ -178,13 +225,13 @@ def split(mmap_dir, valid_targets, test_targets):
 
 def main(args):
 
-    # parse entries
-    entries = parse_index(args.data_dir, args.ref_index)
+    # # parse entries
+    # entries = parse_index(args.data_dir, args.ref_index)
 
     # create dataset
     create_mmap(
-        process_iterator(entries, args.interface_dist, n_cpus=args.n_cpus),
-        args.out_dir, len(entries), commit_batch=1000
+        process_iterator(args.data_dir, args.ref_index, args.interface_dist, n_cpus=args.n_cpus),
+        args.out_dir, 4612 * 50, commit_batch=1000
     )
 
     # # split

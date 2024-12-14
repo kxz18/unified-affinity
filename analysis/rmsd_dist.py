@@ -29,9 +29,17 @@ def main(args):
     for line in lines:
         line = line.strip().split('\t')
         props = ast.literal_eval(line[-1])
-        data['rmsd'].append(props['rmsd'])
-        data['rmsd_norm'].append(props['rmsd'] / len(props['sequence']))
-        data['seq_len'].append(len(props['sequence']))
+        rmsd = props['rmsd']
+        if isinstance(rmsd, tuple):
+            rmsd = rmsd[1]
+            assert len(rmsd) == len(props['sequence'])
+            data['rmsd'].extend(rmsd)
+            data['rmsd_norm'].extend(rmsd)
+            data['seq_len'].extend([len(props['sequence']) for _ in rmsd])
+        else:
+            data['rmsd'].append(props['rmsd'])
+            data['rmsd_norm'].append(props['rmsd'] / len(props['sequence']))
+            data['seq_len'].append(len(props['sequence']))
 
     os.makedirs(args.out_dir, exist_ok=True)
 

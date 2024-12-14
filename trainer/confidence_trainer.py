@@ -30,7 +30,7 @@ class ConfidenceTrainer(Trainer):
         confidence = model.infer(batch)
 
         self.val_pred_target.append((
-            confidence.detach(), confidence.detach(), batch['label'], ['all' for _ in confidence]
+            confidence.detach(), confidence.detach(), batch['agg_label'], ['all' for _ in confidence]
         ))
         
         return self.share_step(batch, batch_idx, val=True)

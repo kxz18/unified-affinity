@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_mean
 
 from utils import register as R
 
@@ -43,7 +43,7 @@ def discretize(values, n_bins, min_val, max_val):
 @R.register('ConfidenceModel')
 class ConfidenceModel(PredictionModel):
 
-    def __init__(self, model_type, hidden_size, n_channel, n_bins=50, min_val=0, max_val=10.0, **kwargs) -> None:
+    def __init__(self, model_type, hidden_size, n_channel, n_bins=50, min_val=0, max_val=10.0, residue_level=False, **kwargs) -> None:
         super().__init__(model_type, hidden_size, n_channel, **kwargs)
         self.n_bins = n_bins
         self.min_val = min_val
@@ -59,12 +59,16 @@ class ConfidenceModel(PredictionModel):
             torch.zeros(1), self.n_bins, self.min_val, self.max_val
         )
         self.register_buffer('bin_vals', bin_vals)
+        self.residue_level = residue_level
     
     def forward(self, Z, B, A, atom_positions, block_lengths, lengths, segment_ids, label, return_noise=False) -> ReturnValue:
         return_value = super().forward(Z, B, A, atom_positions, block_lengths, lengths, segment_ids, label, return_noise)
-
-        confidence = self.confidence_head(return_value.graph_repr) # [n_bins + 2]
         label, _ = discretize(label, self.n_bins, self.min_val, self.max_val)
+        if self.residue_level:
+            confidence = self.confidence_head(return_value.block_repr)
+            confidence = confidence[segment_ids == 1]
+        else:
+            confidence = self.confidence_head(return_value.graph_repr) # [n_bins + 2]
         return F.cross_entropy(confidence, label) + 0 * return_value.energy.sum()
     
     def infer(self, batch):
@@ -76,9 +80,17 @@ class ConfidenceModel(PredictionModel):
             segment_ids=batch['segment_ids'],
             label=None
         )
-        confidence = self.confidence_head(return_value.graph_repr)
-        confidence = F.softmax(confidence, dim=-1) # [bs, n_bins + 2]
-        confidence = (self.bin_vals.unsqueeze(0) * confidence).sum(-1)
+        if self.residue_level:
+            lig_mask = batch['segment_ids'] == 1
+            confidence = self.confidence_head(return_value.block_repr)
+            confidence = confidence[lig_mask] # [Nlig, n_bins + 2]
+            confidence = F.softmax(confidence, dim=-1) # [Nlig, n_bins + 2]
+            confidence = (self.bin_vals.unsqueeze(0) * confidence).sum(-1) # [Nlig]
+            confidence = scatter_mean(confidence, return_value.batch_id[lig_mask], dim=0)
+        else:
+            confidence = self.confidence_head(return_value.graph_repr)
+            confidence = F.softmax(confidence, dim=-1) # [bs, n_bins + 2]
+            confidence = (self.bin_vals.unsqueeze(0) * confidence).sum(-1)
 
         return confidence
 
